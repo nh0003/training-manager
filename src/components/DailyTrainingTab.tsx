@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { assignExercisesToDate, updateRecordStatus } from '../db/database'
+import { useEffect, useState } from 'react'
+import { assignExercisesToDate, formatDate, isRestDay, updateRecordStatus } from '../db/database'
 import { useExercises, usePlanWithRecords } from '../hooks/useTraining'
-import { formatDateJP, exerciseSummary } from '../utils/helpers'
+import { categoryBadgeLabel, exerciseSummary, formatDateJP } from '../utils/helpers'
 import { isToday } from '../db/database'
-import { STATUS_LABELS, type TrainingRecord } from '../types'
+import { STATUS_LABELS, type Exercise, type TrainingRecord } from '../types'
 
 interface Props {
   date: Date
@@ -17,13 +17,12 @@ export default function DailyTrainingTab({ date }: Props) {
   const [skipReason, setSkipReason] = useState('')
 
   const title = isToday(date) ? '今日のトレーニング' : formatDateJP(date, { weekday: true })
+  const dateStr = formatDate(date)
+  const restDay = data ? isRestDay(data.plan, data.records) : false
 
   const handleAssign = async (selectedIds: Set<string>) => {
     const selected = exercises.filter((e) => selectedIds.has(e.id))
-    await assignExercisesToDate(
-      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
-      selected,
-    )
+    await assignExercisesToDate(dateStr, selected)
     setShowPicker(false)
   }
 
@@ -36,17 +35,40 @@ export default function DailyTrainingTab({ date }: Props) {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-bold">{title}</h2>
         <button
           onClick={() => setShowPicker(true)}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium"
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium shrink-0"
         >
-          ＋ 種目追加
+          種目を編集
         </button>
       </div>
 
-      {!data || data.records.length === 0 ? (
+      {!data ? (
+        <div className="text-center py-12">
+          <div className="text-5xl mb-4">💪</div>
+          <p className="text-slate-500 mb-4">トレーニングが未設定です</p>
+          <button
+            onClick={() => setShowPicker(true)}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium"
+          >
+            種目を設定する
+          </button>
+        </div>
+      ) : restDay ? (
+        <div className="text-center py-12">
+          <div className="text-5xl mb-4">😴</div>
+          <p className="text-slate-600 font-medium mb-2">この日はトレーニングなし</p>
+          <p className="text-slate-400 text-sm mb-4">休養日として設定されています</p>
+          <button
+            onClick={() => setShowPicker(true)}
+            className="px-6 py-2 border border-blue-600 text-blue-600 rounded-lg font-medium"
+          >
+            種目を追加する
+          </button>
+        </div>
+      ) : data.records.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-4">💪</div>
           <p className="text-slate-500 mb-4">トレーニングが未設定です</p>
@@ -59,7 +81,6 @@ export default function DailyTrainingTab({ date }: Props) {
         </div>
       ) : (
         <>
-          {/* Completion card */}
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center gap-4">
             <div className="flex-1">
               <p className="text-xs text-slate-500">完了率</p>
@@ -70,7 +91,6 @@ export default function DailyTrainingTab({ date }: Props) {
             <CircularProgress rate={data.completionRate} />
           </div>
 
-          {/* Records */}
           <div className="space-y-3">
             {data.records.map((record) => (
               <div
@@ -79,10 +99,19 @@ export default function DailyTrainingTab({ date }: Props) {
               >
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <h3 className="font-semibold">{record.exerciseName}</h3>
-                    <p className="text-sm text-slate-500">
-                      {exerciseSummary(record.sets, record.reps)}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold">{record.exerciseName}</h3>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                          record.category === 'strength'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {categoryBadgeLabel(record.category)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-500">{exerciseSummary(record)}</p>
                   </div>
                   <span
                     className={`text-xs px-2 py-1 rounded-full font-medium ${
@@ -135,16 +164,15 @@ export default function DailyTrainingTab({ date }: Props) {
         </>
       )}
 
-      {/* Exercise picker modal */}
       {showPicker && (
         <ExercisePickerModal
           exercises={exercises}
+          initialSelected={data?.plan.exerciseIds ?? []}
           onConfirm={handleAssign}
           onClose={() => setShowPicker(false)}
         />
       )}
 
-      {/* Skip reason modal */}
       {skipTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50">
           <div className="bg-white rounded-t-2xl w-full max-w-lg p-6 space-y-4">
@@ -205,14 +233,20 @@ function CircularProgress({ rate }: { rate: number }) {
 
 function ExercisePickerModal({
   exercises,
+  initialSelected,
   onConfirm,
   onClose,
 }: {
-  exercises: { id: string; name: string; sets: number; reps: number }[]
+  exercises: Exercise[]
+  initialSelected: string[]
   onConfirm: (ids: Set<string>) => void
   onClose: () => void
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(new Set(initialSelected))
+
+  useEffect(() => {
+    setSelected(new Set(initialSelected))
+  }, [initialSelected])
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -223,49 +257,85 @@ function ExercisePickerModal({
     })
   }
 
+  const strengthExercises = exercises.filter((e) => e.category === 'strength')
+  const cardioExercises = exercises.filter((e) => e.category === 'cardio')
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50">
-      <div className="bg-white rounded-t-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+      <div className="bg-white rounded-t-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-bold">種目を選択</h3>
-          <button onClick={onClose} className="text-slate-400 text-xl">×</button>
+          <button onClick={onClose} className="text-slate-400 text-xl">
+            ×
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {exercises.length === 0 ? (
             <p className="text-center text-slate-400 py-8">
               種目がありません。「種目」タブから追加してください。
             </p>
           ) : (
-            exercises.map((ex) => (
-              <button
-                key={ex.id}
-                onClick={() => toggle(ex.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                  selected.has(ex.id)
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <div className="text-left">
-                  <p className="font-medium">{ex.name}</p>
-                  <p className="text-xs text-slate-500">{exerciseSummary(ex.sets, ex.reps)}</p>
-                </div>
-                {selected.has(ex.id) && <span className="text-blue-600">✓</span>}
-              </button>
-            ))
+            <>
+              {strengthExercises.length > 0 && (
+                <ExerciseGroup title="筋トレ" exercises={strengthExercises} selected={selected} onToggle={toggle} />
+              )}
+              {cardioExercises.length > 0 && (
+                <ExerciseGroup title="有酸素" exercises={cardioExercises} selected={selected} onToggle={toggle} />
+              )}
+            </>
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-100 space-y-2">
           <button
             onClick={() => onConfirm(selected)}
-            disabled={selected.size === 0}
-            className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium disabled:opacity-40"
+            className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium"
           >
-            設定する（{selected.size}種目）
+            {selected.size === 0 ? '0件に設定（休養日）' : `設定する（${selected.size}種目）`}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="w-full py-2 text-sm text-slate-500"
+          >
+            すべて解除
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ExerciseGroup({
+  title,
+  exercises,
+  selected,
+  onToggle,
+}: {
+  title: string
+  exercises: Exercise[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 mb-2">{title}</p>
+      <div className="space-y-2">
+        {exercises.map((ex) => (
+          <button
+            key={ex.id}
+            onClick={() => onToggle(ex.id)}
+            className={`w-full flex items-center justify-between p-3 rounded-lg border transition-colors ${
+              selected.has(ex.id) ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <div className="text-left">
+              <p className="font-medium">{ex.name}</p>
+              <p className="text-xs text-slate-500">{exerciseSummary(ex)}</p>
+            </div>
+            {selected.has(ex.id) && <span className="text-blue-600">✓</span>}
+          </button>
+        ))}
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, formatDate, getRecordsForPlan } from '../db/database'
-import { formatDateJP, formatMonthYear, getDaysInMonth } from '../utils/helpers'
+import { db, formatDate, getRecordsForPlan, isRestDay } from '../db/database'
+import { exerciseSummary, formatDateJP, formatMonthYear, getDaysInMonth } from '../utils/helpers'
 import { isSameDay, isToday } from '../db/database'
 
 interface Props {
@@ -28,12 +28,14 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
   }, [formatDate(selectedDate)])
 
   const planInfoCache = useLiveQuery(async () => {
-    const cache: Record<string, { hasTraining: boolean; rate: number }> = {}
+    const cache: Record<string, { hasTraining: boolean; isRestDay: boolean; rate: number }> = {}
     for (const plan of plans) {
       const records = await getRecordsForPlan(plan.id)
       const completed = records.filter((r) => r.status === 'completed').length
+      const rest = isRestDay(plan, records)
       cache[plan.date] = {
         hasTraining: records.length > 0,
+        isRestDay: rest,
         rate: records.length > 0 ? completed / records.length : 0,
       }
     }
@@ -44,10 +46,12 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
     setDisplayMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1))
   }
 
-  const dotColor = (rate: number, hasTraining: boolean) => {
-    if (!hasTraining) return 'bg-transparent'
-    if (rate >= 1) return 'bg-green-500'
-    if (rate > 0) return 'bg-orange-400'
+  const dotColor = (info?: { hasTraining: boolean; isRestDay: boolean; rate: number }) => {
+    if (!info) return 'bg-transparent'
+    if (info.isRestDay) return 'bg-slate-400'
+    if (!info.hasTraining) return 'bg-transparent'
+    if (info.rate >= 1) return 'bg-green-500'
+    if (info.rate > 0) return 'bg-orange-400'
     return 'bg-slate-300'
   }
 
@@ -97,7 +101,7 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
             >
               <span>{day.getDate()}</span>
               <span
-                className={`w-1.5 h-1.5 rounded-full mt-0.5 ${dotColor(info?.rate ?? 0, info?.hasTraining ?? false)}`}
+                className={`w-1.5 h-1.5 rounded-full mt-0.5 ${dotColor(info)}`}
               />
             </button>
           )
@@ -108,7 +112,17 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
       <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
         <h3 className="font-semibold mb-3">{formatDateJP(selectedDate, { weekday: true })}</h3>
 
-        {selectedPlanData && selectedPlanData.records.length > 0 ? (
+        {selectedPlanData && isRestDay(selectedPlanData.plan, selectedPlanData.records) ? (
+          <div className="text-center py-4">
+            <p className="text-slate-500 text-sm mb-3">この日はトレーニングなし（休養日）</p>
+            <button
+              onClick={() => onSelectDate(selectedDate)}
+              className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg text-sm"
+            >
+              詳細を見る
+            </button>
+          </div>
+        ) : selectedPlanData && selectedPlanData.records.length > 0 ? (
           <div className="space-y-2">
             {selectedPlanData.records.map((record) => (
               <div key={record.id} className="flex items-center justify-between text-sm">
@@ -116,9 +130,7 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
                   <StatusIcon status={record.status} />
                   <span>{record.exerciseName}</span>
                 </div>
-                <span className="text-slate-400 text-xs">
-                  {record.sets}×{record.reps}
-                </span>
+                <span className="text-slate-400 text-xs">{exerciseSummary(record)}</span>
               </div>
             ))}
             <div className="mt-3">

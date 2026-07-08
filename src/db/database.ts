@@ -1,5 +1,10 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { DailyPlan, Exercise, TrainingRecord } from '../types'
+import type { DailyPlan, Exercise, ExerciseInput, TrainingRecord } from '../types'
+import {
+  createDefaultCardioFields,
+  createDefaultStrengthFields,
+  exerciseToRecordFields,
+} from '../types'
 
 const db = new Dexie('TrainingManagerDB') as Dexie & {
   exercises: EntityTable<Exercise, 'id'>
@@ -13,6 +18,39 @@ db.version(1).stores({
   trainingRecords: 'id, planId, exerciseId, status',
 })
 
+db.version(2)
+  .stores({
+    exercises: 'id, name, category, createdAt',
+    dailyPlans: 'id, date, createdAt',
+    trainingRecords: 'id, planId, exerciseId, status, category',
+  })
+  .upgrade(async (tx) => {
+    await tx
+      .table('exercises')
+      .toCollection()
+      .modify((ex: Partial<Exercise> & { reps?: number; sets?: number }) => {
+        ex.category = 'strength'
+        ex.weightKg = ex.weightKg ?? 0
+        ex.trackDuration = false
+        ex.trackDistance = false
+        ex.durationMinutes = 30
+        ex.distanceMeters = 3000
+        ex.reps = ex.reps ?? 10
+        ex.sets = ex.sets ?? 3
+      })
+
+    await tx.table('trainingRecords').toCollection().modify((record: Partial<TrainingRecord>) => {
+      record.category = 'strength'
+      record.weightKg = record.weightKg ?? 0
+      record.trackDuration = false
+      record.trackDistance = false
+      record.durationMinutes = 30
+      record.distanceMeters = 3000
+      record.reps = record.reps ?? 10
+      record.sets = record.sets ?? 3
+    })
+  })
+
 export { db }
 
 export function generateId(): string {
@@ -24,31 +62,67 @@ export async function seedSampleData(): Promise<void> {
   if (count > 0) return
 
   const now = Date.now()
-  const samples: Omit<Exercise, 'id'>[] = [
-    { name: 'スクワット', reps: 15, sets: 3, notes: '', createdAt: now, updatedAt: now },
-    { name: 'プッシュアップ', reps: 10, sets: 3, notes: '', createdAt: now, updatedAt: now },
-    { name: 'プランク', reps: 60, sets: 3, notes: '秒数', createdAt: now, updatedAt: now },
-    { name: 'ランジ', reps: 12, sets: 3, notes: '', createdAt: now, updatedAt: now },
+  const strengthDefaults = createDefaultStrengthFields()
+  const cardioDefaults = createDefaultCardioFields()
+
+  const samples: ExerciseInput[] = [
+    {
+      name: 'スクワット',
+      category: 'strength',
+      notes: '',
+      ...strengthDefaults,
+      reps: 15,
+      sets: 3,
+      weightKg: 20,
+    },
+    {
+      name: 'プッシュアップ',
+      category: 'strength',
+      notes: '',
+      ...strengthDefaults,
+      reps: 10,
+      sets: 3,
+      weightKg: 0,
+    },
+    {
+      name: 'ジョギング',
+      category: 'cardio',
+      notes: '',
+      ...cardioDefaults,
+      trackDuration: true,
+      trackDistance: true,
+      durationMinutes: 30,
+      distanceMeters: 5000,
+    },
+    {
+      name: 'バイク',
+      category: 'cardio',
+      notes: '',
+      ...cardioDefaults,
+      trackDuration: true,
+      trackDistance: false,
+      durationMinutes: 20,
+      distanceMeters: 0,
+    },
   ]
 
-  await db.exercises.bulkAdd(samples.map((s) => ({ ...s, id: generateId() })))
+  await db.exercises.bulkAdd(
+    samples.map((s) => ({
+      ...s,
+      id: generateId(),
+      createdAt: now,
+      updatedAt: now,
+    })),
+  )
 }
 
 // --- Exercise CRUD ---
 
-export async function createExercise(
-  name: string,
-  reps: number,
-  sets: number,
-  notes = '',
-): Promise<Exercise> {
+export async function createExercise(data: ExerciseInput): Promise<Exercise> {
   const now = Date.now()
   const exercise: Exercise = {
     id: generateId(),
-    name,
-    reps,
-    sets,
-    notes,
+    ...data,
     createdAt: now,
     updatedAt: now,
   }
@@ -56,10 +130,7 @@ export async function createExercise(
   return exercise
 }
 
-export async function updateExercise(
-  id: string,
-  data: Pick<Exercise, 'name' | 'reps' | 'sets' | 'notes'>,
-): Promise<void> {
+export async function updateExercise(id: string, data: ExerciseInput): Promise<void> {
   await db.exercises.update(id, { ...data, updatedAt: Date.now() })
 }
 
@@ -88,14 +159,18 @@ export async function assignExercisesToDate(
     await db.dailyPlans.update(existing.id, {
       exerciseIds: exercises.map((e) => e.id),
     })
+
+    if (exercises.length === 0) {
+      return { ...existing, exerciseIds: [] }
+    }
+
     const records: TrainingRecord[] = exercises.map((ex) => ({
       id: generateId(),
       planId: existing.id,
       exerciseId: ex.id,
       exerciseName: ex.name,
-      reps: ex.reps,
-      sets: ex.sets,
       status: 'pending' as const,
+      ...exerciseToRecordFields(ex),
     }))
     await db.trainingRecords.bulkAdd(records)
     return { ...existing, exerciseIds: exercises.map((e) => e.id) }
@@ -107,15 +182,21 @@ export async function assignExercisesToDate(
     exerciseIds: exercises.map((e) => e.id),
     createdAt: Date.now(),
   }
+
+  if (exercises.length === 0) {
+    await db.dailyPlans.add(plan)
+    return plan
+  }
+
   const records: TrainingRecord[] = exercises.map((ex) => ({
     id: generateId(),
     planId: plan.id,
     exerciseId: ex.id,
     exerciseName: ex.name,
-    reps: ex.reps,
-    sets: ex.sets,
     status: 'pending' as const,
+    ...exerciseToRecordFields(ex),
   }))
+
   await db.transaction('rw', db.dailyPlans, db.trainingRecords, async () => {
     await db.dailyPlans.add(plan)
     await db.trainingRecords.bulkAdd(records)
@@ -227,4 +308,8 @@ export function isSameDay(a: Date, b: Date): boolean {
 
 export function isToday(date: Date): boolean {
   return isSameDay(date, new Date())
+}
+
+export function isRestDay(plan: DailyPlan | undefined, records: TrainingRecord[]): boolean {
+  return !!plan && plan.exerciseIds.length === 0 && records.length === 0
 }
