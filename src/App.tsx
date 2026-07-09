@@ -16,7 +16,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('calendar')
   const [selectedDate, setSelectedDate] = useState(new Date())
 
-  const handleDateSelect = (date: Date) => {
+  const handleCalendarDateSelect = (date: Date) => {
+    setSelectedDate(date)
+  }
+
+  const handleOpenTodayDetail = (date: Date) => {
     setSelectedDate(date)
     setActiveTab('today')
   }
@@ -29,7 +33,11 @@ export default function App() {
 
       <main className="flex-1 overflow-y-auto pb-20">
         {activeTab === 'calendar' && (
-          <CalendarTab selectedDate={selectedDate} onSelectDate={handleDateSelect} />
+          <CalendarTab
+            selectedDate={selectedDate}
+            onSelectDate={handleCalendarDateSelect}
+            onOpenDetail={handleOpenTodayDetail}
+          />
         )}
         {activeTab === 'today' && <DailyTrainingTab date={selectedDate} />}
         {activeTab === 'exercises' && <ExerciseListTab />}

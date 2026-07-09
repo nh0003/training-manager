@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, formatDate, getRecordsForPlan, isRestDay } from '../db/database'
 import { exerciseSummary, formatDateJP, formatMonthYear, getDaysInMonth } from '../utils/helpers'
@@ -7,12 +7,17 @@ import { isSameDay, isToday } from '../db/database'
 interface Props {
   selectedDate: Date
   onSelectDate: (date: Date) => void
+  onOpenDetail: (date: Date) => void
 }
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
+const SWIPE_THRESHOLD = 50
 
-export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
-  const [displayMonth, setDisplayMonth] = useState(new Date())
+export default function CalendarTab({ selectedDate, onSelectDate, onOpenDetail }: Props) {
+  const [displayMonth, setDisplayMonth] = useState(
+    () => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+  )
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
 
   const plans = useLiveQuery(() => db.dailyPlans.toArray(), []) ?? []
 
@@ -42,8 +47,41 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
     return cache
   }, [plans]) ?? {}
 
+  useEffect(() => {
+    const month = selectedDate.getMonth()
+    const year = selectedDate.getFullYear()
+    setDisplayMonth((prev) => {
+      if (prev.getMonth() === month && prev.getFullYear() === year) return prev
+      return new Date(year, month, 1)
+    })
+  }, [selectedDate])
+
   const changeMonth = (delta: number) => {
     setDisplayMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1))
+  }
+
+  const shiftDate = (delta: number) => {
+    const next = new Date(selectedDate)
+    next.setDate(next.getDate() + delta)
+    onSelectDate(next)
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartRef.current
+    touchStartRef.current = null
+    if (!start) return
+
+    const deltaX = e.changedTouches[0].clientX - start.x
+    const deltaY = e.changedTouches[0].clientY - start.y
+
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY)) return
+
+    if (deltaX > 0) shiftDate(-1)
+    else shiftDate(1)
   }
 
   const dotColor = (info?: { hasTraining: boolean; isRestDay: boolean; rate: number }) => {
@@ -108,15 +146,22 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
         })}
       </div>
 
-      {/* Selected day preview */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-        <h3 className="font-semibold mb-3">{formatDateJP(selectedDate, { weekday: true })}</h3>
+      {/* Selected day preview — swipe left/right to change date */}
+      <div
+        className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 touch-pan-y select-none"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold">{formatDateJP(selectedDate, { weekday: true })}</h3>
+          <span className="text-[10px] text-slate-400">← スワイプで日付移動 →</span>
+        </div>
 
         {selectedPlanData && isRestDay(selectedPlanData.plan, selectedPlanData.records) ? (
           <div className="text-center py-4">
             <p className="text-slate-500 text-sm mb-3">この日はトレーニングなし（休養日）</p>
             <button
-              onClick={() => onSelectDate(selectedDate)}
+              onClick={() => onOpenDetail(selectedDate)}
               className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg text-sm"
             >
               詳細を見る
@@ -146,7 +191,7 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
               </div>
             </div>
             <button
-              onClick={() => onSelectDate(selectedDate)}
+              onClick={() => onOpenDetail(selectedDate)}
               className="w-full mt-2 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium"
             >
               詳細を見る
@@ -156,10 +201,10 @@ export default function CalendarTab({ selectedDate, onSelectDate }: Props) {
           <div className="text-center py-4">
             <p className="text-slate-400 text-sm mb-3">この日のトレーニングは未設定です</p>
             <button
-              onClick={() => onSelectDate(selectedDate)}
+              onClick={() => onOpenDetail(selectedDate)}
               className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg text-sm"
             >
-              トレーニングを設定する
+              詳細を見る
             </button>
           </div>
         )}
