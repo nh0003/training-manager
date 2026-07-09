@@ -4,6 +4,7 @@ import { useExercises, usePlanWithRecords } from '../hooks/useTraining'
 import { categoryBadgeLabel, exerciseSummary, formatDateJP } from '../utils/helpers'
 import { isToday } from '../db/database'
 import { STATUS_LABELS, type Exercise, type TrainingRecord } from '../types'
+import TrainingMetricsEditor from './TrainingMetricsEditor'
 
 interface Props {
   date: Date
@@ -97,12 +98,12 @@ export default function DailyTrainingTab({ date }: Props) {
                 key={record.id}
                 className="bg-white rounded-xl p-4 shadow-sm border border-slate-100"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-start justify-between mb-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
                       <h3 className="font-semibold">{record.exerciseName}</h3>
                       <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
                           record.category === 'strength'
                             ? 'bg-blue-100 text-blue-700'
                             : 'bg-emerald-100 text-emerald-700'
@@ -111,10 +112,9 @@ export default function DailyTrainingTab({ date }: Props) {
                         {categoryBadgeLabel(record.category)}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-500">{exerciseSummary(record)}</p>
                   </div>
                   <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium ${
+                    className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ml-2 ${
                       record.status === 'completed'
                         ? 'bg-green-100 text-green-700'
                         : record.status === 'skipped'
@@ -125,6 +125,8 @@ export default function DailyTrainingTab({ date }: Props) {
                     {STATUS_LABELS[record.status]}
                   </span>
                 </div>
+
+                <TrainingMetricsEditor record={record} />
 
                 {record.status === 'skipped' && record.skipReason && (
                   <p className="text-xs text-orange-600 bg-orange-50 rounded px-2 py-1 mb-2">
@@ -331,7 +333,7 @@ function ExerciseGroup({
           >
             <div className="text-left">
               <p className="font-medium">{ex.name}</p>
-              <p className="text-xs text-slate-500">{exerciseSummary(ex)}</p>
+              <p className="text-xs text-slate-500">{exerciseSummary(ex)}（プリセット）</p>
             </div>
             {selected.has(ex.id) && <span className="text-blue-600">✓</span>}
           </button>

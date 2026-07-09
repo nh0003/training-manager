@@ -8,6 +8,7 @@ import {
   createDefaultCardioFields,
   createDefaultStrengthFields,
 } from '../types'
+import { StepperField, ToggleChip, WeightStepperField } from './MetricFormFields'
 
 export default function ExerciseListTab() {
   const exercises = useExercises()
@@ -29,7 +30,10 @@ export default function ExerciseListTab() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold">種目管理</h2>
+        <div>
+          <h2 className="text-lg font-bold">種目管理</h2>
+          <p className="text-xs text-slate-400 mt-0.5">数値はプリセット。当日の内容は「今日」で変更できます</p>
+        </div>
         <button
           onClick={() => {
             setEditing(null)
@@ -197,6 +201,7 @@ function ExerciseFormModal({
     <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50">
       <div className="bg-white rounded-t-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <h3 className="font-bold text-lg">{exercise ? '種目を編集' : '種目を追加'}</h3>
+        <p className="text-xs text-slate-400">プリセット値は新規追加時の初期値として使われます</p>
 
         <div>
           <label className="text-xs text-slate-500 font-medium">カテゴリ</label>
@@ -236,25 +241,7 @@ function ExerciseFormModal({
               <StepperField label="セット数" value={sets} onChange={setSets} min={1} max={20} />
               <StepperField label="回数" value={reps} onChange={setReps} min={1} max={100} />
             </div>
-            <div>
-              <label className="text-xs text-slate-500 font-medium">重さ（kg）</label>
-              <div className="flex items-center gap-2 mt-1">
-                <button
-                  onClick={() => setWeightKg(Math.max(0, weightKg - 2.5))}
-                  className="w-8 h-8 rounded-lg bg-slate-100 text-lg"
-                >
-                  −
-                </button>
-                <span className="flex-1 text-center font-bold">{weightKg} kg</span>
-                <button
-                  onClick={() => setWeightKg(Math.min(500, weightKg + 2.5))}
-                  className="w-8 h-8 rounded-lg bg-slate-100 text-lg"
-                >
-                  ＋
-                </button>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">自重のみの場合は 0 kg</p>
-            </div>
+            <WeightStepperField value={weightKg} onChange={setWeightKg} />
           </>
         ) : (
           <>
@@ -328,65 +315,5 @@ function ExerciseFormModal({
         </div>
       </div>
     </div>
-  )
-}
-
-function StepperField({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  step = 1,
-}: {
-  label: string
-  value: number
-  onChange: (v: number) => void
-  min: number
-  max: number
-  step?: number
-}) {
-  return (
-    <div>
-      <label className="text-xs text-slate-500 font-medium">{label}</label>
-      <div className="flex items-center gap-2 mt-1">
-        <button
-          onClick={() => onChange(Math.max(min, value - step))}
-          className="w-8 h-8 rounded-lg bg-slate-100 text-lg"
-        >
-          −
-        </button>
-        <span className="flex-1 text-center font-bold">{value}</span>
-        <button
-          onClick={() => onChange(Math.min(max, value + step))}
-          className="w-8 h-8 rounded-lg bg-slate-100 text-lg"
-        >
-          ＋
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function ToggleChip({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={`py-2.5 rounded-lg text-sm font-medium border ${
-        checked ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600'
-      }`}
-    >
-      {checked ? '✓ ' : ''}
-      {label}
-    </button>
   )
 }

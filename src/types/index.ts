@@ -45,6 +45,7 @@ export interface TrainingRecord {
   trackDistance: boolean
   durationMinutes: number
   distanceMeters: number
+  memo: string
 }
 
 export type TabId = 'calendar' | 'today' | 'exercises' | 'progress'
@@ -112,5 +113,6 @@ export function exerciseToRecordFields(
     trackDistance: ex.trackDistance,
     durationMinutes: ex.durationMinutes,
     distanceMeters: ex.distanceMeters,
+    memo: '',
   }
 }

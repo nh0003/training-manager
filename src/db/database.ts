@@ -51,6 +51,18 @@ db.version(2)
     })
   })
 
+db.version(3)
+  .stores({
+    exercises: 'id, name, category, createdAt',
+    dailyPlans: 'id, date, createdAt',
+    trainingRecords: 'id, planId, exerciseId, status, category',
+  })
+  .upgrade(async (tx) => {
+    await tx.table('trainingRecords').toCollection().modify((record: Partial<TrainingRecord>) => {
+      record.memo = record.memo ?? ''
+    })
+  })
+
 export { db }
 
 export function generateId(): string {
@@ -153,27 +165,38 @@ export async function assignExercisesToDate(
   exercises: Exercise[],
 ): Promise<DailyPlan> {
   const existing = await getPlanByDate(date)
+  const existingRecords = existing ? await getRecordsForPlan(existing.id) : []
+  const existingByExerciseId = new Map(existingRecords.map((r) => [r.exerciseId, r]))
 
   if (existing) {
-    await db.trainingRecords.where('planId').equals(existing.id).delete()
-    await db.dailyPlans.update(existing.id, {
-      exerciseIds: exercises.map((e) => e.id),
-    })
+    const newExerciseIds = exercises.map((e) => e.id)
+    await db.dailyPlans.update(existing.id, { exerciseIds: newExerciseIds })
 
-    if (exercises.length === 0) {
-      return { ...existing, exerciseIds: [] }
+    const toRemove = existingRecords.filter((r) => !newExerciseIds.includes(r.exerciseId))
+    if (toRemove.length > 0) {
+      await db.trainingRecords.bulkDelete(toRemove.map((r) => r.id))
     }
 
-    const records: TrainingRecord[] = exercises.map((ex) => ({
-      id: generateId(),
-      planId: existing.id,
-      exerciseId: ex.id,
-      exerciseName: ex.name,
-      status: 'pending' as const,
-      ...exerciseToRecordFields(ex),
-    }))
-    await db.trainingRecords.bulkAdd(records)
-    return { ...existing, exerciseIds: exercises.map((e) => e.id) }
+    for (const ex of exercises) {
+      const prev = existingByExerciseId.get(ex.id)
+      if (prev) {
+        await db.trainingRecords.update(prev.id, {
+          exerciseName: ex.name,
+          category: ex.category,
+        })
+      } else {
+        await db.trainingRecords.add({
+          id: generateId(),
+          planId: existing.id,
+          exerciseId: ex.id,
+          exerciseName: ex.name,
+          status: 'pending',
+          ...exerciseToRecordFields(ex),
+        })
+      }
+    }
+
+    return { ...existing, exerciseIds: newExerciseIds }
   }
 
   const plan: DailyPlan = {
@@ -205,6 +228,18 @@ export async function assignExercisesToDate(
 }
 
 // --- Training Record ---
+
+export type RecordMetricsUpdate = Pick<
+  TrainingRecord,
+  'reps' | 'sets' | 'weightKg' | 'trackDuration' | 'trackDistance' | 'durationMinutes' | 'distanceMeters' | 'memo'
+>
+
+export async function updateRecordMetrics(
+  id: string,
+  metrics: Partial<RecordMetricsUpdate>,
+): Promise<void> {
+  await db.trainingRecords.update(id, metrics)
+}
 
 export async function updateRecordStatus(
   id: string,
