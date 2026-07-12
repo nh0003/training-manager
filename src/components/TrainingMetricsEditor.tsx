@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { updateRecordMetrics } from '../db/database'
 import { categoryBadgeLabel, exerciseSummary } from '../utils/helpers'
 import type { TrainingRecord } from '../types'
+import { CATEGORY_BADGE_CLASS, isTimedSetCategory } from '../types'
 import { StepperField, ToggleChip, WeightStepperField } from './MetricFormFields'
 
 interface Props {
@@ -47,32 +48,75 @@ function RecordMetricsModal({
   const [trackDistance, setTrackDistance] = useState(record.trackDistance)
   const [durationMinutes, setDurationMinutes] = useState(record.durationMinutes)
   const [distanceMeters, setDistanceMeters] = useState(record.distanceMeters)
+  const [trackSeconds, setTrackSeconds] = useState(record.trackSeconds ?? false)
+  const [trackReps, setTrackReps] = useState(record.trackReps ?? false)
+  const [durationSeconds, setDurationSeconds] = useState(record.durationSeconds ?? 30)
   const [memo, setMemo] = useState(record.memo ?? '')
 
   const cardioValid = trackDuration || trackDistance
+  const timedValid = trackSeconds || trackReps
 
   const preview: Pick<
     TrainingRecord,
-    'category' | 'reps' | 'sets' | 'weightKg' | 'trackDuration' | 'trackDistance' | 'durationMinutes' | 'distanceMeters'
+    | 'category'
+    | 'reps'
+    | 'sets'
+    | 'weightKg'
+    | 'trackDuration'
+    | 'trackDistance'
+    | 'durationMinutes'
+    | 'distanceMeters'
+    | 'trackSeconds'
+    | 'trackReps'
+    | 'durationSeconds'
   > =
     record.category === 'strength'
-      ? { category: 'strength', reps, sets, weightKg, trackDuration: false, trackDistance: false, durationMinutes: 0, distanceMeters: 0 }
-      : {
-          category: 'cardio',
-          reps: 0,
-          sets: 0,
-          weightKg: 0,
-          trackDuration,
-          trackDistance,
-          durationMinutes: trackDuration ? durationMinutes : 0,
-          distanceMeters: trackDistance ? distanceMeters : 0,
+      ? {
+          category: 'strength',
+          reps,
+          sets,
+          weightKg,
+          trackDuration: false,
+          trackDistance: false,
+          durationMinutes: 0,
+          distanceMeters: 0,
+          trackSeconds: false,
+          trackReps: true,
+          durationSeconds: 0,
         }
+      : record.category === 'cardio'
+        ? {
+            category: 'cardio',
+            reps: 0,
+            sets: 0,
+            weightKg: 0,
+            trackDuration,
+            trackDistance,
+            durationMinutes: trackDuration ? durationMinutes : 0,
+            distanceMeters: trackDistance ? distanceMeters : 0,
+            trackSeconds: false,
+            trackReps: false,
+            durationSeconds: 0,
+          }
+        : {
+            category: record.category,
+            reps: trackReps ? reps : 0,
+            sets,
+            weightKg,
+            trackDuration: false,
+            trackDistance: false,
+            durationMinutes: 0,
+            distanceMeters: 0,
+            trackSeconds,
+            trackReps,
+            durationSeconds: trackSeconds ? durationSeconds : 0,
+          }
 
   const handleSave = async () => {
     const memoValue = memo.trim()
     if (record.category === 'strength') {
       await updateRecordMetrics(record.id, { sets, reps, weightKg, memo: memoValue })
-    } else {
+    } else if (record.category === 'cardio') {
       if (!cardioValid) return
       await updateRecordMetrics(record.id, {
         trackDuration,
@@ -81,11 +125,24 @@ function RecordMetricsModal({
         distanceMeters: trackDistance ? distanceMeters : 0,
         memo: memoValue,
       })
+    } else {
+      if (!timedValid) return
+      await updateRecordMetrics(record.id, {
+        sets,
+        weightKg,
+        trackSeconds,
+        trackReps,
+        durationSeconds: trackSeconds ? durationSeconds : 0,
+        reps: trackReps ? reps : 0,
+        memo: memoValue,
+      })
     }
     onClose()
   }
 
-  const canSave = record.category === 'strength' || cardioValid
+  const canSave =
+    record.category === 'strength' ||
+    (record.category === 'cardio' ? cardioValid : timedValid)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50">
@@ -99,18 +156,14 @@ function RecordMetricsModal({
           <div className="flex items-center gap-2">
             <p className="font-semibold">{record.exerciseName}</p>
             <span
-              className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                record.category === 'strength'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-emerald-100 text-emerald-700'
-              }`}
+              className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${CATEGORY_BADGE_CLASS[record.category]}`}
             >
               {categoryBadgeLabel(record.category)}
             </span>
           </div>
         </div>
 
-        {record.category === 'strength' ? (
+        {record.category === 'strength' && (
           <>
             <div className="grid grid-cols-2 gap-3">
               <StepperField label="セット数" value={sets} onChange={setSets} min={1} max={20} />
@@ -118,7 +171,9 @@ function RecordMetricsModal({
             </div>
             <WeightStepperField value={weightKg} onChange={setWeightKg} />
           </>
-        ) : (
+        )}
+
+        {record.category === 'cardio' && (
           <>
             <div>
               <label className="text-xs text-slate-500 font-medium">記録する指標（複数選択可）</label>
@@ -149,6 +204,36 @@ function RecordMetricsModal({
             {!cardioValid && (
               <p className="text-xs text-orange-600">時間または距離のいずれかを選択してください</p>
             )}
+          </>
+        )}
+
+        {isTimedSetCategory(record.category) && (
+          <>
+            <StepperField label="セット数" value={sets} onChange={setSets} min={1} max={20} />
+            <div>
+              <label className="text-xs text-slate-500 font-medium">記録する指標（複数選択可）</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <ToggleChip label="秒数" checked={trackSeconds} onChange={setTrackSeconds} />
+                <ToggleChip label="回数" checked={trackReps} onChange={setTrackReps} />
+              </div>
+            </div>
+            {trackSeconds && (
+              <StepperField
+                label="秒数"
+                value={durationSeconds}
+                onChange={setDurationSeconds}
+                min={5}
+                max={600}
+                step={5}
+              />
+            )}
+            {trackReps && (
+              <StepperField label="回数" value={reps} onChange={setReps} min={1} max={100} />
+            )}
+            {!timedValid && (
+              <p className="text-xs text-orange-600">秒数または回数のいずれかを選択してください</p>
+            )}
+            <WeightStepperField value={weightKg} onChange={setWeightKg} />
           </>
         )}
 

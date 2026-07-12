@@ -3,6 +3,7 @@ import type { DailyPlan, Exercise, ExerciseInput, TrainingRecord } from '../type
 import {
   createDefaultCardioFields,
   createDefaultStrengthFields,
+  createDefaultTimedSetFields,
   exerciseToRecordFields,
 } from '../types'
 
@@ -63,6 +64,26 @@ db.version(3)
     })
   })
 
+db.version(4)
+  .stores({
+    exercises: 'id, name, category, createdAt',
+    dailyPlans: 'id, date, createdAt',
+    trainingRecords: 'id, planId, exerciseId, status, category',
+  })
+  .upgrade(async (tx) => {
+    await tx.table('exercises').toCollection().modify((ex: Partial<Exercise>) => {
+      ex.trackSeconds = ex.trackSeconds ?? false
+      ex.trackReps = ex.trackReps ?? (ex.category === 'strength' || ex.category === undefined)
+      ex.durationSeconds = ex.durationSeconds ?? 30
+    })
+    await tx.table('trainingRecords').toCollection().modify((record: Partial<TrainingRecord>) => {
+      record.trackSeconds = record.trackSeconds ?? false
+      record.trackReps = record.trackReps ?? (record.category === 'strength' || record.category === undefined)
+      record.durationSeconds = record.durationSeconds ?? 30
+      record.memo = record.memo ?? ''
+    })
+  })
+
 export { db }
 
 export function generateId(): string {
@@ -76,6 +97,7 @@ export async function seedSampleData(): Promise<void> {
   const now = Date.now()
   const strengthDefaults = createDefaultStrengthFields()
   const cardioDefaults = createDefaultCardioFields()
+  const timedDefaults = createDefaultTimedSetFields()
 
   const samples: ExerciseInput[] = [
     {
@@ -115,6 +137,36 @@ export async function seedSampleData(): Promise<void> {
       trackDistance: false,
       durationMinutes: 20,
       distanceMeters: 0,
+    },
+    {
+      name: 'ハムストリングス',
+      category: 'stretch',
+      notes: '',
+      ...timedDefaults,
+      trackSeconds: true,
+      trackReps: false,
+      durationSeconds: 30,
+      sets: 2,
+    },
+    {
+      name: '太もも外側',
+      category: 'foam',
+      notes: '',
+      ...timedDefaults,
+      trackSeconds: true,
+      trackReps: false,
+      durationSeconds: 60,
+      sets: 2,
+    },
+    {
+      name: 'プランク',
+      category: 'core',
+      notes: '',
+      ...timedDefaults,
+      trackSeconds: true,
+      trackReps: false,
+      durationSeconds: 45,
+      sets: 3,
     },
   ]
 
@@ -231,7 +283,17 @@ export async function assignExercisesToDate(
 
 export type RecordMetricsUpdate = Pick<
   TrainingRecord,
-  'reps' | 'sets' | 'weightKg' | 'trackDuration' | 'trackDistance' | 'durationMinutes' | 'distanceMeters' | 'memo'
+  | 'reps'
+  | 'sets'
+  | 'weightKg'
+  | 'trackDuration'
+  | 'trackDistance'
+  | 'durationMinutes'
+  | 'distanceMeters'
+  | 'trackSeconds'
+  | 'trackReps'
+  | 'durationSeconds'
+  | 'memo'
 >
 
 export async function updateRecordMetrics(

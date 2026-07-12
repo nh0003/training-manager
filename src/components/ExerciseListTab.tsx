@@ -4,9 +4,13 @@ import { useExercises } from '../hooks/useTraining'
 import { categoryBadgeLabel, exerciseSummary } from '../utils/helpers'
 import type { Exercise, ExerciseCategory, ExerciseInput } from '../types'
 import {
+  CATEGORY_BADGE_CLASS,
+  CATEGORY_BUTTON_ACTIVE_CLASS,
   CATEGORY_LABELS,
-  createDefaultCardioFields,
-  createDefaultStrengthFields,
+  CATEGORY_PLACEHOLDERS,
+  EXERCISE_CATEGORIES,
+  createDefaultFieldsForCategory,
+  isTimedSetCategory,
 } from '../types'
 import { StepperField, ToggleChip, WeightStepperField } from './MetricFormFields'
 
@@ -45,8 +49,8 @@ export default function ExerciseListTab() {
         </button>
       </div>
 
-      <div className="flex gap-2">
-        {(['all', 'strength', 'cardio'] as const).map((key) => (
+      <div className="flex gap-2 flex-wrap">
+        {(['all', ...EXERCISE_CATEGORIES] as const).map((key) => (
           <button
             key={key}
             onClick={() => setFilter(key)}
@@ -81,11 +85,7 @@ export default function ExerciseListTab() {
                 <div className="flex items-center gap-2 mb-1">
                   <p className="font-semibold">{ex.name}</p>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                      ex.category === 'strength'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-emerald-100 text-emerald-700'
-                    }`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${CATEGORY_BADGE_CLASS[ex.category]}`}
                   >
                     {categoryBadgeLabel(ex.category)}
                   </span>
@@ -134,50 +134,69 @@ function ExerciseFormModal({
   const [trackDistance, setTrackDistance] = useState(exercise?.trackDistance ?? true)
   const [durationMinutes, setDurationMinutes] = useState(exercise?.durationMinutes ?? 30)
   const [distanceMeters, setDistanceMeters] = useState(exercise?.distanceMeters ?? 3000)
+  const [trackSeconds, setTrackSeconds] = useState(exercise?.trackSeconds ?? true)
+  const [trackReps, setTrackReps] = useState(exercise?.trackReps ?? true)
+  const [durationSeconds, setDurationSeconds] = useState(exercise?.durationSeconds ?? 30)
 
   const handleCategoryChange = (next: ExerciseCategory) => {
     setCategory(next)
-    if (next === 'strength') {
-      const d = createDefaultStrengthFields()
-      setReps(d.reps)
-      setSets(d.sets)
-      setWeightKg(d.weightKg)
-    } else {
-      const d = createDefaultCardioFields()
-      setTrackDuration(d.trackDuration)
-      setTrackDistance(d.trackDistance)
-      setDurationMinutes(d.durationMinutes)
-      setDistanceMeters(d.distanceMeters)
-    }
+    const d = createDefaultFieldsForCategory(next)
+    setReps(d.reps)
+    setSets(d.sets)
+    setWeightKg(d.weightKg)
+    setTrackDuration(d.trackDuration)
+    setTrackDistance(d.trackDistance)
+    setDurationMinutes(d.durationMinutes)
+    setDistanceMeters(d.distanceMeters)
+    setTrackSeconds(d.trackSeconds)
+    setTrackReps(d.trackReps)
+    setDurationSeconds(d.durationSeconds)
   }
 
   const buildInput = (): ExerciseInput | null => {
     const trimmed = name.trim()
     if (!trimmed) return null
 
+    const base = createDefaultFieldsForCategory(category)
+
     if (category === 'strength') {
       return {
         name: trimmed,
         category,
         notes,
-        ...createDefaultStrengthFields(),
+        ...base,
         reps,
         sets,
         weightKg,
       }
     }
 
-    if (!trackDuration && !trackDistance) return null
+    if (category === 'cardio') {
+      if (!trackDuration && !trackDistance) return null
+      return {
+        name: trimmed,
+        category,
+        notes,
+        ...base,
+        trackDuration,
+        trackDistance,
+        durationMinutes: trackDuration ? durationMinutes : 0,
+        distanceMeters: trackDistance ? distanceMeters : 0,
+      }
+    }
 
+    if (!trackSeconds && !trackReps) return null
     return {
       name: trimmed,
       category,
       notes,
-      ...createDefaultCardioFields(),
-      trackDuration,
-      trackDistance,
-      durationMinutes: trackDuration ? durationMinutes : 0,
-      distanceMeters: trackDistance ? distanceMeters : 0,
+      ...base,
+      sets,
+      weightKg,
+      trackSeconds,
+      trackReps,
+      durationSeconds: trackSeconds ? durationSeconds : 0,
+      reps: trackReps ? reps : 0,
     }
   }
 
@@ -206,17 +225,13 @@ function ExerciseFormModal({
         <div>
           <label className="text-xs text-slate-500 font-medium">カテゴリ</label>
           <div className="grid grid-cols-2 gap-2 mt-1">
-            {(['strength', 'cardio'] as const).map((key) => (
+            {EXERCISE_CATEGORIES.map((key) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => handleCategoryChange(key)}
                 className={`py-2.5 rounded-lg text-sm font-medium border ${
-                  category === key
-                    ? key === 'strength'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                    : 'border-slate-200 text-slate-600'
+                  category === key ? CATEGORY_BUTTON_ACTIVE_CLASS[key] : 'border-slate-200 text-slate-600'
                 }`}
               >
                 {CATEGORY_LABELS[key]}
@@ -230,12 +245,12 @@ function ExerciseFormModal({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={category === 'strength' ? '例: スクワット' : '例: ジョギング'}
+            placeholder={CATEGORY_PLACEHOLDERS[category]}
             className="w-full mt-1 border border-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        {category === 'strength' ? (
+        {category === 'strength' && (
           <>
             <div className="grid grid-cols-2 gap-3">
               <StepperField label="セット数" value={sets} onChange={setSets} min={1} max={20} />
@@ -243,21 +258,15 @@ function ExerciseFormModal({
             </div>
             <WeightStepperField value={weightKg} onChange={setWeightKg} />
           </>
-        ) : (
+        )}
+
+        {category === 'cardio' && (
           <>
             <div>
               <label className="text-xs text-slate-500 font-medium">記録する指標（複数選択可）</label>
               <div className="grid grid-cols-2 gap-2 mt-1">
-                <ToggleChip
-                  label="時間（分）"
-                  checked={trackDuration}
-                  onChange={setTrackDuration}
-                />
-                <ToggleChip
-                  label="距離（m）"
-                  checked={trackDistance}
-                  onChange={setTrackDistance}
-                />
+                <ToggleChip label="時間（分）" checked={trackDuration} onChange={setTrackDuration} />
+                <ToggleChip label="距離（m）" checked={trackDistance} onChange={setTrackDistance} />
               </div>
             </div>
             {trackDuration && (
@@ -282,6 +291,36 @@ function ExerciseFormModal({
             {!trackDuration && !trackDistance && (
               <p className="text-xs text-orange-600">時間または距離のいずれかを選択してください</p>
             )}
+          </>
+        )}
+
+        {isTimedSetCategory(category) && (
+          <>
+            <StepperField label="セット数" value={sets} onChange={setSets} min={1} max={20} />
+            <div>
+              <label className="text-xs text-slate-500 font-medium">記録する指標（複数選択可）</label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <ToggleChip label="秒数" checked={trackSeconds} onChange={setTrackSeconds} />
+                <ToggleChip label="回数" checked={trackReps} onChange={setTrackReps} />
+              </div>
+            </div>
+            {trackSeconds && (
+              <StepperField
+                label="秒数"
+                value={durationSeconds}
+                onChange={setDurationSeconds}
+                min={5}
+                max={600}
+                step={5}
+              />
+            )}
+            {trackReps && (
+              <StepperField label="回数" value={reps} onChange={setReps} min={1} max={100} />
+            )}
+            {!trackSeconds && !trackReps && (
+              <p className="text-xs text-orange-600">秒数または回数のいずれかを選択してください</p>
+            )}
+            <WeightStepperField value={weightKg} onChange={setWeightKg} />
           </>
         )}
 

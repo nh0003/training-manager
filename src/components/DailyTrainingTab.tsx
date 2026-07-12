@@ -3,7 +3,7 @@ import { assignExercisesToDate, formatDate, isRestDay, updateRecordStatus } from
 import { useExercises, usePlanWithRecords } from '../hooks/useTraining'
 import { categoryBadgeLabel, exerciseSummary, formatDateJP } from '../utils/helpers'
 import { isToday } from '../db/database'
-import { STATUS_LABELS, type Exercise, type TrainingRecord } from '../types'
+import { STATUS_LABELS, CATEGORY_BADGE_CLASS, CATEGORY_LABELS, EXERCISE_CATEGORIES, type Exercise, type TrainingRecord } from '../types'
 import TrainingMetricsEditor from './TrainingMetricsEditor'
 
 interface Props {
@@ -103,11 +103,7 @@ export default function DailyTrainingTab({ date }: Props) {
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold">{record.exerciseName}</h3>
                       <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
-                          record.category === 'strength'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${CATEGORY_BADGE_CLASS[record.category]}`}
                       >
                         {categoryBadgeLabel(record.category)}
                       </span>
@@ -259,9 +255,6 @@ function ExercisePickerModal({
     })
   }
 
-  const strengthExercises = exercises.filter((e) => e.category === 'strength')
-  const cardioExercises = exercises.filter((e) => e.category === 'cardio')
-
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50">
       <div className="bg-white rounded-t-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
@@ -279,12 +272,19 @@ function ExercisePickerModal({
             </p>
           ) : (
             <>
-              {strengthExercises.length > 0 && (
-                <ExerciseGroup title="筋トレ" exercises={strengthExercises} selected={selected} onToggle={toggle} />
-              )}
-              {cardioExercises.length > 0 && (
-                <ExerciseGroup title="有酸素" exercises={cardioExercises} selected={selected} onToggle={toggle} />
-              )}
+              {EXERCISE_CATEGORIES.map((cat) => {
+                const group = exercises.filter((e) => e.category === cat)
+                if (group.length === 0) return null
+                return (
+                  <ExerciseGroup
+                    key={cat}
+                    title={CATEGORY_LABELS[cat]}
+                    exercises={group}
+                    selected={selected}
+                    onToggle={toggle}
+                  />
+                )
+              })}
             </>
           )}
         </div>

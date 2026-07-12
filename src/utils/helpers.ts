@@ -1,5 +1,5 @@
 import type { Exercise, ExerciseCategory, TrainingRecord } from '../types'
-import { CATEGORY_LABELS } from '../types'
+import { CATEGORY_LABELS, isTimedSetCategory } from '../types'
 
 export function formatDateJP(date: Date, options?: { weekday?: boolean; monthDay?: boolean }): string {
   if (options?.weekday) {
@@ -37,6 +37,9 @@ type SummarySource = Pick<
   | 'trackDistance'
   | 'durationMinutes'
   | 'distanceMeters'
+  | 'trackSeconds'
+  | 'trackReps'
+  | 'durationSeconds'
 >
 
 export function exerciseSummary(item: SummarySource): string {
@@ -45,10 +48,22 @@ export function exerciseSummary(item: SummarySource): string {
     return item.weightKg > 0 ? `${base}（${item.weightKg}kg）` : base
   }
 
-  const parts: string[] = []
-  if (item.trackDuration) parts.push(`${item.durationMinutes}分`)
-  if (item.trackDistance) parts.push(`${item.distanceMeters}m`)
-  return parts.length > 0 ? parts.join(' / ') : '指標未設定'
+  if (item.category === 'cardio') {
+    const parts: string[] = []
+    if (item.trackDuration) parts.push(`${item.durationMinutes}分`)
+    if (item.trackDistance) parts.push(`${item.distanceMeters}m`)
+    return parts.length > 0 ? parts.join(' / ') : '指標未設定'
+  }
+
+  if (isTimedSetCategory(item.category)) {
+    const parts: string[] = [`${item.sets}セット`]
+    if (item.trackSeconds) parts.push(`${item.durationSeconds}秒`)
+    if (item.trackReps) parts.push(`${item.reps}回`)
+    const base = parts.join(' × ')
+    return item.weightKg > 0 ? `${base}（${item.weightKg}kg）` : base
+  }
+
+  return '指標未設定'
 }
 
 export function categoryBadgeLabel(category: ExerciseCategory): string {
