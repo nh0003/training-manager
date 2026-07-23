@@ -325,12 +325,13 @@ function ExerciseFormModal({
         )}
 
         <div>
-          <label className="text-xs text-slate-500 font-medium">メモ（任意）</label>
+          <label className="text-xs text-slate-500 font-medium">種目メモ（任意）</label>
+          <p className="text-[10px] text-slate-400 mt-0.5 mb-1">今日のトレーニングで参照表示されます（注意点など）</p>
           <input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="フォームの注意点など"
-            className="w-full mt-1 border border-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="例: 膝が前に出ないように"
+            className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 

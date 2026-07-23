@@ -93,7 +93,10 @@ export default function DailyTrainingTab({ date }: Props) {
           </div>
 
           <div className="space-y-3">
-            {data.records.map((record) => (
+            {data.records.map((record) => {
+              const presetNotes =
+                exercises.find((e) => e.id === record.exerciseId)?.notes ?? ''
+              return (
               <div
                 key={record.id}
                 className="bg-white rounded-xl p-4 shadow-sm border border-slate-100"
@@ -122,7 +125,7 @@ export default function DailyTrainingTab({ date }: Props) {
                   </span>
                 </div>
 
-                <TrainingMetricsEditor record={record} />
+                <TrainingMetricsEditor record={record} presetNotes={presetNotes} />
 
                 {record.status === 'skipped' && record.skipReason && (
                   <p className="text-xs text-orange-600 bg-orange-50 rounded px-2 py-1 mb-2">
@@ -157,7 +160,8 @@ export default function DailyTrainingTab({ date }: Props) {
                   </button>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
         </>
       )}
@@ -334,6 +338,9 @@ function ExerciseGroup({
             <div className="text-left">
               <p className="font-medium">{ex.name}</p>
               <p className="text-xs text-slate-500">{exerciseSummary(ex)}（プリセット）</p>
+              {ex.notes.trim() && (
+                <p className="text-xs text-violet-600 mt-0.5 line-clamp-1">種目メモ: {ex.notes}</p>
+              )}
             </div>
             {selected.has(ex.id) && <span className="text-blue-600">✓</span>}
           </button>

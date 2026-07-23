@@ -7,13 +7,24 @@ import { StepperField, ToggleChip, WeightStepperField } from './MetricFormFields
 
 interface Props {
   record: TrainingRecord
+  /** 種目管理のプリセットメモ（参照専用） */
+  presetNotes?: string
 }
 
-export default function TrainingMetricsEditor({ record }: Props) {
+export default function TrainingMetricsEditor({ record, presetNotes = '' }: Props) {
   const [showModal, setShowModal] = useState(false)
+  const notes = presetNotes.trim()
+  const dayMemo = record.memo.trim()
 
   return (
     <>
+      {notes && (
+        <div className="mt-2 rounded-lg bg-violet-50 border border-violet-100 px-3 py-2">
+          <p className="text-[10px] text-violet-500 font-medium mb-0.5">種目メモ（参照）</p>
+          <p className="text-xs text-violet-800 whitespace-pre-wrap">{notes}</p>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => setShowModal(true)}
@@ -21,14 +32,18 @@ export default function TrainingMetricsEditor({ record }: Props) {
       >
         <p className="text-xs text-slate-500 mb-1">トレーニング内容</p>
         <p className="text-sm font-semibold text-slate-800">{exerciseSummary(record)}</p>
-        {record.memo.trim() && (
-          <p className="text-xs text-slate-500 mt-1 line-clamp-2">📝 {record.memo}</p>
+        {dayMemo && (
+          <p className="text-xs text-slate-500 mt-1 line-clamp-2">📝 当日メモ: {dayMemo}</p>
         )}
         <p className="text-xs text-blue-600 mt-1.5">タップして編集</p>
       </button>
 
       {showModal && (
-        <RecordMetricsModal record={record} onClose={() => setShowModal(false)} />
+        <RecordMetricsModal
+          record={record}
+          presetNotes={notes}
+          onClose={() => setShowModal(false)}
+        />
       )}
     </>
   )
@@ -36,9 +51,11 @@ export default function TrainingMetricsEditor({ record }: Props) {
 
 function RecordMetricsModal({
   record,
+  presetNotes,
   onClose,
 }: {
   record: TrainingRecord
+  presetNotes: string
   onClose: () => void
 }) {
   const [sets, setSets] = useState(record.sets)
@@ -237,13 +254,21 @@ function RecordMetricsModal({
           </>
         )}
 
+        {presetNotes && (
+          <div className="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2">
+            <p className="text-[10px] text-violet-500 font-medium mb-0.5">種目メモ（参照・変更不可）</p>
+            <p className="text-xs text-violet-800 whitespace-pre-wrap">{presetNotes}</p>
+          </div>
+        )}
+
         <div>
-          <label className="text-xs text-slate-500 font-medium">メモ（任意）</label>
+          <label className="text-xs text-slate-500 font-medium">当日メモ（任意）</label>
+          <p className="text-[10px] text-slate-400 mt-0.5 mb-1">この日だけのメモです。種目管理のメモとは別に保存されます</p>
           <textarea
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
-            placeholder="例: 次回は少し重さを上げる"
-            className="w-full mt-1 border border-slate-200 rounded-lg p-3 text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="例: 今日はこの重さでOKだったので次回は上げる"
+            className="w-full border border-slate-200 rounded-lg p-3 text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
