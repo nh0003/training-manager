@@ -263,7 +263,9 @@ function RecordMetricsModal({
 
         <div>
           <label className="text-xs text-slate-500 font-medium">当日メモ（任意）</label>
-          <p className="text-[10px] text-slate-400 mt-0.5 mb-1">この日だけのメモです。種目管理のメモとは別に保存されます</p>
+          <p className="text-[10px] text-slate-400 mt-0.5 mb-1">
+            種目追加時は前回の当日メモが初期表示されます。この日用に編集して保存できます
+          </p>
           <textarea
             value={memo}
             onChange={(e) => setMemo(e.target.value)}

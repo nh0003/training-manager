@@ -212,6 +212,34 @@ export async function getRecordsForPlan(planId: string): Promise<TrainingRecord[
   return db.trainingRecords.where('planId').equals(planId).toArray()
 }
 
+/** 同じ種目で、指定日より前の最新の当日メモを取得（なければ空文字） */
+export async function getPreviousMemoForExercise(
+  exerciseId: string,
+  beforeDate: string,
+): Promise<string> {
+  const records = await db.trainingRecords.where('exerciseId').equals(exerciseId).toArray()
+  if (records.length === 0) return ''
+
+  const planIds = [...new Set(records.map((r) => r.planId))]
+  const plans = await db.dailyPlans.bulkGet(planIds)
+  const planDateById = new Map<string, string>()
+  for (const plan of plans) {
+    if (plan) planDateById.set(plan.id, plan.date)
+  }
+
+  let bestDate = ''
+  let bestMemo = ''
+  for (const record of records) {
+    const d = planDateById.get(record.planId)
+    if (!d || d >= beforeDate) continue
+    if (!bestDate || d > bestDate) {
+      bestDate = d
+      bestMemo = (record.memo ?? '').trim()
+    }
+  }
+  return bestMemo
+}
+
 export async function assignExercisesToDate(
   date: string,
   exercises: Exercise[],
@@ -237,6 +265,7 @@ export async function assignExercisesToDate(
           category: ex.category,
         })
       } else {
+        const previousMemo = await getPreviousMemoForExercise(ex.id, date)
         await db.trainingRecords.add({
           id: generateId(),
           planId: existing.id,
@@ -244,6 +273,7 @@ export async function assignExercisesToDate(
           exerciseName: ex.name,
           status: 'pending',
           ...exerciseToRecordFields(ex),
+          memo: previousMemo,
         })
       }
     }
@@ -263,14 +293,19 @@ export async function assignExercisesToDate(
     return plan
   }
 
-  const records: TrainingRecord[] = exercises.map((ex) => ({
-    id: generateId(),
-    planId: plan.id,
-    exerciseId: ex.id,
-    exerciseName: ex.name,
-    status: 'pending' as const,
-    ...exerciseToRecordFields(ex),
-  }))
+  const records: TrainingRecord[] = []
+  for (const ex of exercises) {
+    const previousMemo = await getPreviousMemoForExercise(ex.id, date)
+    records.push({
+      id: generateId(),
+      planId: plan.id,
+      exerciseId: ex.id,
+      exerciseName: ex.name,
+      status: 'pending' as const,
+      ...exerciseToRecordFields(ex),
+      memo: previousMemo,
+    })
+  }
 
   await db.transaction('rw', db.dailyPlans, db.trainingRecords, async () => {
     await db.dailyPlans.add(plan)
